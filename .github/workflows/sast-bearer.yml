@@ -1,0 +1,91 @@
+
+# Nombre del workflow en GitHub Actions.
+name: SAST - Bearer CLI
+
+# Eventos que activan el workflow.
+on:
+  # Se ejecuta cuando hay cambios en main.
+  push:
+    branches: [main]
+
+  # Se ejecuta al abrir o actualizar un PR hacia main.
+  pull_request:
+    branches: [main]
+
+  # Permite ejecutar el pipeline manualmente.
+  workflow_dispatch:
+
+# Permisos mínimos del GITHUB_TOKEN.
+permissions:
+  # Permite descargar el código fuente.
+  contents: read
+  # Permite publicar hallazgos en Code Scanning.
+  security-events: write
+
+# Trabajos que realizará GitHub Actions.
+jobs:
+  # Identificador del trabajo de análisis SAST.
+  bearer:
+    # Nombre visible del trabajo.
+    name: Analisis SAST con Bearer
+
+    # Ejecuta el trabajo en un runner Linux.
+    runs-on: ubuntu-latest
+
+    # Pasos del trabajo.
+    steps:
+      # Paso 1: descargar el repositorio.
+      - name: Descargar codigo fuente
+        uses: actions/checkout@v4
+
+      # Paso 2: instalar Bearer CLI en el runner.
+      - name: Instalar Bearer CLI
+        run: |
+          curl -sfL https://raw.githubusercontent.com/Bearer/bearer/main/contrib/install.sh -o install-bearer.sh
+          sh install-bearer.sh
+          sudo mv ./bin/bearer /usr/local/bin/bearer
+          bearer version
+
+      # Paso 3: preparar carpeta de resultados.
+      - name: Crear carpeta de reportes
+        run: mkdir -p reportes
+
+      # Paso 4: analizar todo el repositorio y generar SARIF.
+      - name: Ejecutar Bearer y generar SARIF
+        run: |
+          bearer scan . \
+            --format sarif \
+            --output reportes/bearer.sarif \
+            --exit-code 0
+
+      # Paso 5: ejecutar el analisis y generar HTML.
+      - name: Generar reporte HTML
+        run: |
+          bearer scan . \
+            --format html \
+            --output reportes/bearer.html \
+            --exit-code 0
+
+      # Paso 6: publicar el SARIF en GitHub Code Scanning.
+      - name: Publicar resultados SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          # Archivo SARIF generado por Bearer.
+          sarif_file: reportes/bearer.sarif
+          # Identificador del analisis.
+          category: bearer-sast
+
+      # Paso 7: conservar los reportes como artefactos.
+      - name: Guardar reportes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Nombre del artefacto descargable.
+          name: bearer-reportes
+          # Incluye ambos formatos.
+          path: |
+            reportes/bearer.sarif
+            reportes/bearer.html
+          # Conserva los resultados durante 30 dias.
+          retention-days: 30
