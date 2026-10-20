@@ -6,8 +6,8 @@ const router = Router()
 router.get('/demo-vulnerabilidad', (req, res) => {
   const expression = String(req.query.expression || '')
 
-  // VULNERABLE: ejecuta entrada proporcionada por el usuario.
-  const result = eval(expression)
+  // SEGURO: tratamos la entrada como texto, sin ejecutarla.
+  const result = expression
 
   res.json({ result })
 })
